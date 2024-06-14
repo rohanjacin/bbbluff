@@ -11,86 +11,86 @@ use halo2_proofs::{
 };
 
 #[derive(Debug, Clone)]
-pub struct QtyConfig {
-    qty: Column<Advice>,
+pub struct RankConfig {
+    rank: Column<Advice>,
     q_range_check: Selector,
 }
 
 #[derive(Debug, Clone)]
-pub struct QtyChip<F:PrimeField> {
-    config: QtyConfig,
+pub struct RankChip<F:PrimeField> {
+    config: RankConfig,
     _marker: PhantomData<F>,
 }
 
 #[derive(Debug, Clone)]
-struct QtyConstrained<F: PrimeField>
+struct RankConstrained<F: PrimeField>
     (AssignedCell<Assigned<F>, F>);
 
-trait QtyChipConstrained<F: PrimeField> {
-    fn construct(config: QtyConfig) -> Self;
+trait RankChipConstrained<F: PrimeField> {
+    fn construct(config: RankConfig) -> Self;
     fn configure(meta: &mut ConstraintSystem<F>,
-                suite: Column<Advice>) -> QtyConfig;
+                suite: Column<Advice>) -> RankConfig;
 }
 
-impl<F: PrimeField> QtyChip<F> {
+impl<F: PrimeField> RankChip<F> {
 
-    pub fn construct(config: QtyConfig) -> Self {
+    pub fn construct(config: RankConfig) -> Self {
         Self { config, _marker: PhantomData}
     }
 
     pub fn configure(meta: &mut ConstraintSystem<F>,
-                qty: Column<Advice>, q_range_check: Selector) -> QtyConfig {
+                rank: Column<Advice>, q_range_check: Selector) -> RankConfig {
 
-        fn card_check<F: PrimeField> (value: Expression<F>) -> Expression<F> {
-            (1..4).fold(value.clone(), |acc, i| {
+        fn rank_check<F: PrimeField> (value: Expression<F>) -> Expression<F> {
+            (1..12).fold(value.clone(), |acc, i| {
                 acc * (Expression::Constant(F::from(i as u64)) - value.clone())
             })        
         }
-        // qty | selector
+        // rank | selector
         //   v        s
-        meta.create_gate("qty check",
+        meta.create_gate("rank check",
             |meta| {
                 let s: Expression<F> = meta.query_selector(q_range_check);
                 let v: Expression<F> = meta.query_advice(
-                        qty, Rotation::cur());
+                        rank, Rotation::cur());
 
-                // Qty check [1, 2, 3, 4]
+                // Rank check [Ace, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K]
                 // v * (1 - v) * (2 - v) * ... * (R - 1 - v)
                 //Vec![]
-                let check = card_check(v);
+                let check = rank_check(v);
                 Constraints::with_selector(s, Some(("check", check)))
         });
 
-        QtyConfig {
-            qty: qty,
+        RankConfig {
+            rank: rank,
             q_range_check,
         }
     }
 
     pub fn assign(&self, mut layouter: impl Layouter<F>,
         value: Value<Assigned<F>>) -> 
-        Result<QtyConstrained<F>, Error> {
+        Result<RankConstrained<F>, Error> {
 
         let offset = 0;
 
-        layouter.assign_region( || "Qty", |mut region| {
+        layouter.assign_region( || "Rank", |mut region| {
             self.config.q_range_check.enable(&mut region, offset)?;
 
-            region.assign_advice(|| "qty value",
-                self.config.qty, offset, || value)
-                .map(QtyConstrained)
+            region.assign_advice(|| "rank value",
+                self.config.rank, offset, || value)
+                .map(RankConstrained)
         })
     }
 }
 
 #[derive(Default)]
-struct QtyCircuit<F: PrimeField> {
-    qty: Value<Assigned<F>>,
+struct RankCircuit<F: PrimeField> {
+    rank: Value<Assigned<F>>,
 }
 
-impl<F: PrimeField> Circuit<F> for QtyCircuit<F> {
+impl<F: PrimeField> Circuit<F> for RankCircuit<F> {
 
-    type Config = QtyConfig;
+    type Config = RankConfig;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -98,19 +98,19 @@ impl<F: PrimeField> Circuit<F> for QtyCircuit<F> {
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let qty = meta.advice_column();
+        let card = meta.advice_column();
         let q_range_check = meta.selector();
 
-        QtyChip::configure(meta, qty, q_range_check)
+        RankChip::configure(meta, card, q_range_check)
     }
 
     fn synthesize(&self, config: Self::Config, mut layouter: impl Layouter<F>) 
         -> Result<(), Error> {
 
-        let chip: QtyChip<F> = QtyChip::construct(config);
+        let chip: RankChip<F> = RankChip::construct(config);
 
-        let _ = chip.assign(layouter.namespace(|| "Qty Assign"),
-            self.qty);
+        let _ = chip.assign(layouter.namespace(|| "Rank Assign"),
+            self.rank);
 
         Ok(())
     }
@@ -121,8 +121,8 @@ fn test_range_check_1() {
     const k: u32 = 3;
 
     // Successful case
-    let circuit = QtyCircuit::<Fp> {
-        qty: Value::known(Fp::from(0 as u64).into()),
+    let circuit = RankCircuit::<Fp> {
+        rank: Value::known(Fp::from(11 as u64).into()),
     };
 
     let prover = MockProver::run(k, &circuit, vec![]).unwrap();

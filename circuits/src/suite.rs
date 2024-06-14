@@ -11,13 +11,13 @@ use halo2_proofs::{
 };
 
 #[derive(Debug, Clone)]
-struct SuiteConfig {
+pub struct SuiteConfig {
     suite: Column<Advice>,
     q_range_check: Selector,
 }
 
 #[derive(Debug, Clone)]
-struct SuiteChip<F:PrimeField> {
+pub struct SuiteChip<F:PrimeField> {
     config: SuiteConfig,
     _marker: PhantomData<F>,
 }
@@ -34,11 +34,11 @@ trait SuiteChipConstrained<F: PrimeField> {
 
 impl<F: PrimeField> SuiteChip<F> {
 
-    fn construct(config: SuiteConfig) -> Self {
+    pub fn construct(config: SuiteConfig) -> Self {
         Self { config, _marker: PhantomData}
     }
 
-    fn configure(meta: &mut ConstraintSystem<F>,
+    pub fn configure(meta: &mut ConstraintSystem<F>,
                 suite: Column<Advice>, q_range_check: Selector) -> SuiteConfig {
 
         fn suite_check<F: PrimeField> (value: Expression<F>) -> Expression<F> {
