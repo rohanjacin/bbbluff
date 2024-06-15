@@ -3,14 +3,22 @@ use ff::{Field, PrimeField, PrimeFieldBits};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Value, SimpleFloorPlanner},
     plonk::{Advice, Instance, Assigned, Column, ConstraintSystem,
-        Constraints, Error, Expression, Selector, Circuit},
-    poly::Rotation,
-    pasta::Fp,
-    dev::{FailureLocation, MockProver, VerifyFailure},    
+        Constraints, Error, Expression, Selector, Circuit,
+        VerifyingKey, ProvingKey, SingleVerifier, keygen_vk,
+        keygen_pk, create_proof, verify_proof},
+    poly::{Rotation},
+    poly::commitment::Params,
+    pasta::{Fp, EqAffine},
+    dev::{FailureLocation, MockProver, VerifyFailure}, 
+    transcript::{Blake2bWrite, Challenge255, Blake2bRead}   
 };
+use rand_core::OsRng;
+
+// The length of our card inputs
+const INPUT_LENGTH: usize = 8;
 
 #[derive(Debug, Clone)]
-struct CardConfig {
+pub struct CardConfig {
     qty: Column<Advice>,
     suite: Column<Advice>,
     rank: Column<Advice>,
@@ -146,7 +154,7 @@ impl<F: PrimeField> CardChip<F> {
 }
 
 #[derive(Default)]
-struct CardCircuit<F: PrimeField> {
+pub struct CardCircuit<F: PrimeField> {
     qty: Value<Assigned<F>>,
     suite: Value<Assigned<F>>,
     rank: Value<Assigned<F>>,
@@ -205,4 +213,118 @@ fn test_range_check_1() {
     let public_inputs = vec![vec![pubqty], vec![pubsuite], vec![pubrank]];
     let prover = MockProver::run(k, &circuit, public_inputs).unwrap();
     prover.assert_satisfied();
+}
+
+// Draws the layout of the circuit
+#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "dev-graph")]
+pub fn draw_circuit<F: PrimeField>(k: u32,
+            circuit: &CardCircuit<F>) {
+
+    let base = BitMapBackend::new("layout.png",
+                (1600, 1600)).into_drawing_area();
+    base.fill(&WHITE).unwrap();
+    let base = base.titled("Card Circuit", ("sans-serif", 24)).unwrap();
+
+    halo2_proofs::dev::CircuitLayout::default()
+        .show_equality_constraints(true)
+        .render(k, circuit, &base)
+        .unwrap();
+}
+
+// Generates an empty circuit. Useful for generating
+// the proving/verfiying keys.
+pub fn empty_circuit<F: PrimeField>() -> CardCircuit<F> {
+    CardCircuit {
+        qty: Value::unknown(),
+        suite: Value::unknown(),
+        rank: Value::unknown(),
+    }
+}
+
+// Creates the circuit from the card params
+pub fn create_circuit(qty: u64, suite: u64, rank: u64) ->
+            CardCircuit<Fp> {
+
+    let circuit = CardCircuit::<Fp> {
+        qty: Value::known(Fp::from(qty as u64).into()),
+        suite: Value::known(Fp::from(suite as u64).into()),
+        rank: Value::known(Fp::from(rank as u64).into()),
+    };
+
+    circuit
+}
+
+// Formats the public inputs (quantity, suite, rank)
+pub fn create_public_inputs(qty: u64, suite: u64, rank: u64) -> Vec<Vec<Fp>> {
+    let pubqty = Fp::from(qty as u64).into();
+    let pubsuite = Fp::from(suite as u64).into();
+    let pubrank = Fp::from(rank as u64).into();
+
+    let public_inputs = vec![vec![pubqty], vec![pubsuite], vec![pubrank]];
+
+    public_inputs
+}
+
+// Generates setup params using k, which is the number of
+// rows the circuit can fit in and must be power of 2
+pub fn generate_setup_params(k: u32) -> Params<EqAffine> {
+    Params::<EqAffine>::new(k)
+}
+
+// Generates the proving and verifying keys. We can pass an
+// empty circuit to it
+pub fn generate_keys<F: PrimeField>(params: &Params<EqAffine>,
+        circuit: &CardCircuit<Fp>) -> 
+        (ProvingKey<EqAffine>, VerifyingKey<EqAffine>) {
+    let vk = keygen_vk(params, circuit)
+                .expect("Failed to generate vk");
+    let pk = keygen_pk(params, vk.clone(), circuit)
+                .expect("Failed to generate pk");
+
+    (pk, vk)
+}
+
+pub fn run_mock_prover(k: u32, circuit: &CardCircuit<Fp>,
+        public_inputs: Vec<Vec<Fp>>) {
+
+    let prover = MockProver::run(k, circuit, public_inputs.clone())
+        .expect("Failed to run mock prover..");
+
+    prover.assert_satisfied();
+}
+
+// Generates the proof
+pub fn generate_proof( params: &Params<EqAffine>,
+        pk: &ProvingKey<EqAffine>, circuit: CardCircuit<Fp>,
+        public_inputs: &Vec<Fp>) -> Vec<u8> {
+
+    println!("Generating proof..");
+
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+    
+    create_proof ( params, pk, &[circuit], &[&[public_inputs]],
+        OsRng, &mut transcript
+    )
+    .expect("Failed to create proof");
+    transcript.finalize()
+}
+
+// Verifies the proof
+pub fn verify(params: &Params<EqAffine>, vk: &VerifyingKey<EqAffine>,
+            public_inputs: &Vec<Fp>, proof: Vec<u8>) -> 
+            Result<(), Error> {
+
+    println!("Verifying proof..");
+
+    let strategy = SingleVerifier::new(&params);
+    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+
+    verify_proof(
+        params,
+        vk,
+        strategy,
+        &[&[public_inputs]],
+        &mut transcript
+    )
 }

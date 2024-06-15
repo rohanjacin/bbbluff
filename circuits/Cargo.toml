@@ -6,9 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "carddeck"
-path = "src/card.rs"
+name = "card"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 halo2_proofs = "0.3.0"
 ff = "0.13"
+rand_core = "0.6.4"
