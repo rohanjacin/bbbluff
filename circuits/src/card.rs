@@ -256,12 +256,13 @@ pub fn create_circuit(qty: u64, suite: u64, rank: u64) ->
 }
 
 // Formats the public inputs (quantity, suite, rank)
-pub fn create_public_inputs(qty: u64, suite: u64, rank: u64) -> Vec<Vec<Fp>> {
+pub fn create_public_inputs(qty: u64, suite: u64, rank: u64) -> 
+        (Vec<Fp>, Vec<Fp>, Vec<Fp>) {
     let pubqty = Fp::from(qty as u64).into();
     let pubsuite = Fp::from(suite as u64).into();
     let pubrank = Fp::from(rank as u64).into();
 
-    let public_inputs = vec![vec![pubqty], vec![pubsuite], vec![pubrank]];
+    let public_inputs = (vec!(pubqty), vec!(pubsuite), vec!(pubrank));
 
     public_inputs
 }
@@ -277,6 +278,7 @@ pub fn generate_setup_params(k: u32) -> Params<EqAffine> {
 pub fn generate_keys<F: PrimeField>(params: &Params<EqAffine>,
         circuit: &CardCircuit<Fp>) -> 
         (ProvingKey<EqAffine>, VerifyingKey<EqAffine>) {
+
     let vk = keygen_vk(params, circuit)
                 .expect("Failed to generate vk");
     let pk = keygen_pk(params, vk.clone(), circuit)
@@ -286,9 +288,13 @@ pub fn generate_keys<F: PrimeField>(params: &Params<EqAffine>,
 }
 
 pub fn run_mock_prover(k: u32, circuit: &CardCircuit<Fp>,
-        public_inputs: Vec<Vec<Fp>>) {
+        public_inputs: (&Vec<Fp>, &Vec<Fp>, &Vec<Fp>)) {
 
-    let prover = MockProver::run(k, circuit, public_inputs.clone())
+    let a = public_inputs.0.clone();
+    let b = public_inputs.1.clone();
+    let c = public_inputs.2.clone();
+
+    let prover = MockProver::run(k, circuit, vec![a, b, c])
         .expect("Failed to run mock prover..");
 
     prover.assert_satisfied();
@@ -297,14 +303,14 @@ pub fn run_mock_prover(k: u32, circuit: &CardCircuit<Fp>,
 // Generates the proof
 pub fn generate_proof( params: &Params<EqAffine>,
         pk: &ProvingKey<EqAffine>, circuit: CardCircuit<Fp>,
-        public_inputs: &Vec<Fp>) -> Vec<u8> {
+        public_inputs: (&Vec<Fp>, &Vec<Fp>, &Vec<Fp>)) -> Vec<u8> {
 
     println!("Generating proof..");
 
     let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
     
-    create_proof ( params, pk, &[circuit], &[&[public_inputs]],
-        OsRng, &mut transcript
+    create_proof( params, pk, &[circuit], &[&[&public_inputs.0, 
+        &public_inputs.1, &public_inputs.2]], OsRng, &mut transcript
     )
     .expect("Failed to create proof");
     transcript.finalize()
@@ -312,7 +318,7 @@ pub fn generate_proof( params: &Params<EqAffine>,
 
 // Verifies the proof
 pub fn verify(params: &Params<EqAffine>, vk: &VerifyingKey<EqAffine>,
-            public_inputs: &Vec<Fp>, proof: Vec<u8>) -> 
+            public_inputs: (&Vec<Fp>, &Vec<Fp>, &Vec<Fp>), proof: Vec<u8>) -> 
             Result<(), Error> {
 
     println!("Verifying proof..");
@@ -321,10 +327,7 @@ pub fn verify(params: &Params<EqAffine>, vk: &VerifyingKey<EqAffine>,
     let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
 
     verify_proof(
-        params,
-        vk,
-        strategy,
-        &[&[public_inputs]],
-        &mut transcript
+        params, vk, strategy, &[&[&public_inputs.0, &public_inputs.1,
+        &public_inputs.2]], &mut transcript
     )
 }

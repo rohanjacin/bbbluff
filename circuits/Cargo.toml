@@ -11,6 +11,6 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-halo2_proofs = "0.3.0"
+halo2_proofs = { version = "0.3.0", features = ["dev-graph"] }
 ff = "0.13"
 rand_core = "0.6.4"
