@@ -14,3 +14,5 @@ crate-type = ["cdylib", "rlib"]
 halo2_proofs = { version = "0.3.0", features = ["dev-graph"] }
 ff = "0.13"
 rand_core = "0.6.4"
+js-sys = "0.3.61"
+wasm-bindgen = "0.2.84"

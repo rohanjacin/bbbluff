@@ -76,7 +76,9 @@ version = "0.1.0"
 dependencies = [
  "ff",
  "halo2_proofs",
+ "js-sys",
  "rand_core",
+ "wasm-bindgen",
 ]
 
 [[package]]

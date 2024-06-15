@@ -1,0 +1,6 @@
+{
+  "name": "bbbluff-circuit",
+  "scripts": {
+    "build:wasm":"wasm-pack build --target web --out-dir ../app/wasm"
+  }
+}
